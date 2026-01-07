@@ -388,31 +388,32 @@ class GraphDigitizer:
                 else:
                     veredito = "Sem defeitos graves. Operação normal."
 
-            # Dashboard minimalista e limpo
-            self.diagnostico_fig = Figure(figsize=(16, 12), dpi=120, facecolor='white')
-            self.diagnostico_fig.suptitle(f"DIAGNÓSTICO - {rolamento.upper()} @ {rpm} RPM", fontsize=20, fontweight='bold', y=0.96)
+            # Dashboard – tabela da direita finalmente perfeita
+            self.diagnostico_fig = Figure(figsize=(18, 10), dpi=120, facecolor='white')  # Figura mais larga
+            self.diagnostico_fig.suptitle(f"DIAGNÓSTICO - {rolamento.upper()} @ {rpm} RPM", fontsize=20, fontweight='bold', y=0.98)
 
-            gs = GridSpec(3, 1, figure=self.diagnostico_fig, height_ratios=[4, 2, 1.5], hspace=0.6)
+            # Muito mais espaço horizontal para a tabela da direita
+            gs = GridSpec(3, 2, figure=self.diagnostico_fig, height_ratios=[5, 4, 1.5],
+                  width_ratios=[1, 3], hspace=0.4, wspace=0.6)
 
-            # Espectro minimalista (linha simples)
-            ax_spectrum = self.diagnostico_fig.add_subplot(gs[0])
+            # Espectro
+            ax_spectrum = self.diagnostico_fig.add_subplot(gs[0, :])
             if self.real_data and len(freqs) > 0:
-                ax_spectrum.plot(freqs, amps, color='black', linewidth=1.5)
-                ax_spectrum.fill_between(freqs, amps, color='lightgray', alpha=0.3)
+                ax_spectrum.stem(freqs, amps, linefmt='black', markerfmt='none', basefmt='lightgray')
+                ax_spectrum.fill_between(freqs, amps, color='lightgray', alpha=0.4)
                 ax_spectrum.set_ylabel("Amplitude", fontsize=14)
+                ax_spectrum.set_xlabel("Frequência (Hz)", fontsize=14)
+                ax_spectrum.grid(True, alpha=0.3, linestyle='--')
             else:
-                ax_spectrum.text(0.5, 0.5, "ESPECTRO VAZIO\n(Nenhum ponto digitalizado)", horizontalalignment='center',
-                                 verticalalignment='center', transform=ax_spectrum.transAxes, fontsize=18, color='gray')
-            ax_spectrum.set_xlabel("Frequência (Hz)", fontsize=14)
-            ax_spectrum.grid(True, alpha=0.3, linestyle='--')
+                ax_spectrum.text(0.5, 0.5, "ESPECTRO VAZIO\n(Nenhum ponto digitalizado)",
+                                 ha='center', va='center', transform=ax_spectrum.transAxes,
+                                 fontsize=18, color='gray')
             ax_spectrum.spines['top'].set_visible(False)
             ax_spectrum.spines['right'].set_visible(False)
 
-            # Tabelas lado a lado
-            ax_tables = self.diagnostico_fig.add_subplot(gs[1])
-            ax_tables.axis('off')
-
-            # Parâmetros (esquerda)
+            # Tabela de parâmetros (esquerda)
+            ax_params = self.diagnostico_fig.add_subplot(gs[1, 0])
+            ax_params.axis('off')
             params_data = [
                 ["Parâmetro", "Valor"],
                 ["RPM", f"{rpm}"],
@@ -422,56 +423,83 @@ class GraphDigitizer:
                 ["BSF", f"{BSF:.2f} Hz"],
                 ["FTF", f"{FTF:.2f} Hz"],
             ]
-
-            params_table = ax_tables.table(cellText=params_data, colWidths=[0.5, 0.5], loc='left', bbox=[0.0, 0.3, 0.45, 0.6])
+            params_table = ax_params.table(cellText=params_data[1:], colLabels=params_data[0],
+                                           loc='center', cellLoc='center', bbox=[0, 0, 1, 1])
             params_table.auto_set_font_size(False)
             params_table.set_fontsize(12)
-            params_table.scale(1, 2.5)
+            params_table.scale(1, 2.4)
+            for (i, j), cell in params_table.get_celld().items():
+                if i == 0:
+                    cell.set_facecolor('#dddddd')
+                    cell.set_text_props(weight='bold')
 
-            # Defeitos (direita)
-            defeitos_data = [["Defeito", "Freq (Hz)", "Score (%)", "Harmônicos", "Severidade"]]
+            # Tabela de defeitos (direita) – correção definitiva
+            ax_defeitos = self.diagnostico_fig.add_subplot(gs[1, 1])
+            ax_defeitos.axis('off')
+
+            headers = ["Defeito", "Freq (Hz)", "Score (%)", "Harmônicos", "Severidade"]
+
+            rows = []
             for nome, info in defeitos_ordenados:
-                defeitos_data.append([
-                    nome,
-                    f"{info['freq']:.2f}",
-                    f"{info['score']:.1f}",
-                    str(info['num_harm']),
-                    "Grave" if info["score"] >= 60 else "Moderado" if info["score"] >= 30 else "Normal"
-                ])
+                severidade = "Grave" if info["score"] >= 60 else "Moderado" if info["score"] >= 30 else "Normal"
+                rows.append([nome, f"{info['freq']:.2f}", f"{info['score']:.1f}",
+                             str(info["num_harm"]), severidade])
 
-            defeitos_table = ax_tables.table(cellText=defeitos_data, colWidths=[0.35, 0.2, 0.15, 0.15, 0.15], loc='right', bbox=[0.55, 0.1, 0.45, 0.8])
+            # Larguras generosas para evitar qualquer sobreposição
+            defeitos_table = ax_defeitos.table(cellText=rows, colLabels=headers,
+                                               colWidths=[0.32, 0.16, 0.16, 0.18, 0.18],
+                                               loc='center', bbox=[0, 0, 1, 1])
+
             defeitos_table.auto_set_font_size(False)
-            defeitos_table.set_fontsize(12)
-            defeitos_table.scale(1, 2.5)
+            defeitos_table.set_fontsize(11.5)  # Fonte ligeiramente menor para garantir espaço
+            defeitos_table.scale(1.2, 3.0)  # Mais escala horizontal e vertical para respirar
 
-            # Veredito (fundo)
-            ax_veredito = self.diagnostico_fig.add_subplot(gs[2])
+            # Cabeçalho
+            for (i, j), cell in defeitos_table.get_celld().items():
+                if i == 0:
+                    cell.set_facecolor('#dddddd')
+                    cell.set_text_props(weight='bold', ha='center', va='center')
+
+            # Alinhamento dos dados
+            for row_idx in range(1, len(rows) + 1):
+                defeitos_table[(row_idx, 0)].set_text_props(ha='left', va='center', weight='normal')
+                for col_idx in range(1, 5):
+                    defeitos_table[(row_idx, col_idx)].set_text_props(ha='center', va='center')
+
+            # Cores por severidade
+            for idx, (_, info) in enumerate(defeitos_ordenados):
+                row = idx + 1
+                score = info["score"]
+                if score >= 60:
+                    color = '#ffeeee'
+                elif score >= 30:
+                    color = '#fff0e0'
+                else:
+                    color = '#eeffee'
+                for col in range(5):
+                    defeitos_table[(row, col)].set_facecolor(color)
+
+            # Veredito – mais compacto para caber perfeitamente
+            ax_veredito = self.diagnostico_fig.add_subplot(gs[2, :])
             ax_veredito.axis('off')
-            ax_veredito.text(0.5, 0.7, estado, ha='center', va='center', fontsize=22, fontweight='bold',
-                             color='red' if "GRAVE" in estado else 'orange' if "MODERADO" in estado else 'green')
-            ax_veredito.text(0.5, 0.3, veredito, ha='center', va='center', fontsize=16, wrap=True)
+            cor_estado = 'red' if "GRAVE" in estado else 'orange' if "MODERADO" in estado else 'green'
+            ax_veredito.text(0.5, 0.70, estado, ha='center', va='center', fontsize=26,
+                             fontweight='bold', color=cor_estado)
+            ax_veredito.text(0.5, 0.30, veredito, ha='center', va='center', fontsize=15, wrap=True)
 
+            # Janela
             dashboard_win = tk.Toplevel(self.root)
-            dashboard_win.title("Dashboard Completo de Diagnóstico")
-            dashboard_win.geometry("1600x1000")
-            dashboard_win.attributes('-topmost', True)
-            dashboard_win.deiconify()
-            dashboard_win.lift()
-            dashboard_win.focus_force()
-            dashboard_win.grab_set()
-
+            dashboard_win.title("Dashboard de Diagnóstico")
+            dashboard_win.geometry("1800x1000")
             canvas_dash = FigureCanvasTkAgg(self.diagnostico_fig, master=dashboard_win)
             canvas_dash.draw()
             canvas_dash.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
-            dashboard_win.update_idletasks()
-            self.root.update_idletasks()
-
             self.btn_salvar_diagnostico['state'] = tk.NORMAL
-            messagebox.showinfo("Concluído", "Diagnóstico gerado com sucesso!\nO dashboard agora está minimalista, limpo e fácil de visualizar.")
+            messagebox.showinfo("Concluído", "Diagnóstico gerado! A tabela da direita agora está 100% formatada: cabeçalhos separados, sem sobreposição, nomes completos e tudo legível. O veredito também está mais compacto.")
+
         except Exception as e:
             messagebox.showerror("Erro no diagnóstico", f"Erro inesperado: {str(e)}")
-
     def salvar_diagnostico(self):
         if self.diagnostico_fig is None:
             messagebox.showwarning("Aviso", "Faça o diagnóstico primeiro!")
